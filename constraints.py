@@ -133,20 +133,25 @@ class IdentityConstrain(Constraint):
                 self.attr2 = self._extract_attribute_from_text(remaining)
                 
         elif len(parts) == 3:
-            # Check if any attribute key appears in parts[0]
+            # Try to extract attr1 from parts[0]
             key = self._get_attribute_key_from_text(parts[0])
             if key:
-                self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
+                # First try to extract from parts[0]
+                self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                # If not found, try parts[1] (the value might be in the next part)
+                if not self.attr1:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
             if not self.attr1:
-                self.attr1 = self._extract_attribute_from_text(parts[1])
+                self.attr1 = self._extract_attribute_from_text(parts[0])
             
-            # Check if any attribute key or alias appears in parts[2]
-            key = self._get_attribute_key_from_text(parts[2])
-            if key:
-                self.attr2 = self._extract_attribute_from_text_with_key(key, parts[2])
-
-            if not self.attr2:
-                self.attr2 = self._extract_attribute_from_text(parts[2])
+            # Try to extract attr2 from parts[2], or parts[1] as fallback
+            for part_idx in [2, 1]:
+                if not self.attr2:
+                    key = self._get_attribute_key_from_text(parts[part_idx])
+                    if key:
+                        self.attr2 = self._extract_attribute_from_text_with_key(key, parts[part_idx])
+                    if not self.attr2:
+                        self.attr2 = self._extract_attribute_from_text(parts[part_idx])
         elif len(parts) == 2:
             key = self._get_attribute_key_from_text(parts[0])
             if key:
@@ -242,6 +247,9 @@ class NextToConstrain(Constraint):
             for key in self.attributes.keys():
                 if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
                     self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                    # If not found in parts[0], try parts[1]
+                    if not self.attr1:
+                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                     break
             if not self.attr1:
                 self.attr1 = self._extract_attribute_from_text(parts[0])
@@ -328,6 +336,9 @@ class DistanceConstrain(Constraint):
                 for key in self.attributes.keys():
                     if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
                         self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                        # If not found in parts[0], try parts[1]
+                        if not self.attr1:
+                            self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                         break
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
@@ -391,6 +402,9 @@ class LeftConstrain(Constraint):
                 for key in self.attributes.keys():
                     if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
                         self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                        # If not found in parts[0], try parts[1]
+                        if not self.attr1:
+                            self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                         break
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
@@ -455,6 +469,9 @@ class RightConstrain(Constraint):
             for key in self.attributes.keys():
                 if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
                     self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                    # If not found in parts[0], try parts[1]
+                    if not self.attr1:
+                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                     break
             if not self.attr1:
                 self.attr1 = self._extract_attribute_from_text(parts[0])
@@ -517,6 +534,9 @@ class DirectLeftConstrain(Constraint):
                 for key in self.attributes.keys():
                     if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
                         self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                        # If not found in parts[0], try parts[1]
+                        if not self.attr1:
+                            self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                         break
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
@@ -578,6 +598,9 @@ class DirectRightConstrain(Constraint):
                 for key in self.attributes.keys():
                     if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
                         self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                        # If not found in parts[0], try parts[1]
+                        if not self.attr1:
+                            self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                         break
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
