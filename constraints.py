@@ -461,6 +461,12 @@ class LeftConstrain(Constraint):
                 key = self._get_attribute_key_from_text(second_part)
                 if key:
                     self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
+                    # If not found in the identified key, try case-insensitive matching first
+                    if not self.attr2:
+                        for value in self.attributes[key]:
+                            if value.lower() in second_part.lower():
+                                self.attr2 = (value, key)
+                                break
                 if not self.attr2:
                     self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -526,6 +532,12 @@ class RightConstrain(Constraint):
             key = self._get_attribute_key_from_text(second_part)
             if key:
                 self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
+                # If not found in the identified key, try case-insensitive matching first
+                if not self.attr2:
+                    for value in self.attributes[key]:
+                        if value.lower() in second_part.lower():
+                            self.attr2 = (value, key)
+                            break
             if not self.attr2:
                 self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -588,6 +600,12 @@ class DirectLeftConstrain(Constraint):
             key = self._get_attribute_key_from_text(second_part)
             if key:
                 self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
+                # If not found in the identified key, try case-insensitive matching first
+                if not self.attr2:
+                    for value in self.attributes[key]:
+                        if value.lower() in second_part.lower():
+                            self.attr2 = (value, key)
+                            break
             if not self.attr2:
                 self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -651,6 +669,12 @@ class DirectRightConstrain(Constraint):
                 key = self._get_attribute_key_from_text(second_part)
                 if key:
                     self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
+                    # If not found in the identified key, try case-insensitive matching first
+                    if not self.attr2:
+                        for value in self.attributes[key]:
+                            if value.lower() in second_part.lower():
+                                self.attr2 = (value, key)
+                                break
                 if not self.attr2:
                     self.attr2 = self._extract_attribute_from_text(second_part)
 
