@@ -23,42 +23,64 @@ class Constraint():
         pass
 
     def _get_attribute_key_from_text(self, text):
+        # Check for "mother's" first (before generic matching catches "name")
+        if re.search(rf"\bmother's\b", text, re.IGNORECASE):
+            return "mother"
+        
         for key in self.attributes.keys():
-            if key == "animals": #keeps a pet
+            if key == "animals":
                 if re.search(rf"\b{re.escape("keeps a pet")}\b", text, re.IGNORECASE):
                     return 'pet'
                 if re.search(rf"\b{re.escape("keeps")}\b", text, re.IGNORECASE):
                     return key
                 if re.search(rf"\b{re.escape("keeper")}\b", text, re.IGNORECASE):
                     return key
+            if key == "month":
+                if re.search(rf"\b{re.escape("birthday")}\b", text, re.IGNORECASE):
+                    return key
             if re.search(rf"\b{re.escape(key)}\b", text, re.IGNORECASE):
                 return key
         return None
 
     def _extract_attribute_from_text(self, text):
-        # Sort by length descending to match longer values first (e.g., "super tall" before "tall")
-        best_match = None
-        best_length = 0
-        
         for key in self.attributes.keys():
-            for value in self.attributes[key]:
-                value_modified = self._replace_edgecases(value)
-                if value_modified in text and len(value_modified) > best_length:
-                    best_match = (value, key)
-                    best_length = len(value_modified)
-        
-        return best_match
+            k = self._extract_attribute_from_text_with_key(key, text)
+            if k:
+                return k
     
     def _extract_attribute_from_text_with_key(self, key, text):
         # Sort by length descending to match longer values first
         best_match = None
         best_length = 0
         
+        # Special handling for months - map abbreviations to full names
+        month_mapping = {
+            'jan': 'january',
+            'feb': 'february',
+            'march': 'march',
+            'april': 'april',
+            'may': 'may',
+            'june': 'june',
+            'july': 'july',
+            'aug': 'august',
+            'sept': 'september',
+            'oct': 'october',
+            'nov': 'november',
+            'dec': 'december'
+        }
+        
         for value in self.attributes[key]:
             value_modified = self._replace_edgecases(value)
             if value_modified in text and len(value_modified) > best_length:
                 best_match = (value, key)
                 best_length = len(value_modified)
+            
+            # For months, also check the full month name
+            if key == "month" and value_modified in month_mapping:
+                full_month = month_mapping[value_modified]
+                if full_month in text and len(full_month) > best_length:
+                    best_match = (value, key)
+                    best_length = len(full_month)
         
         return best_match
     
@@ -143,6 +165,8 @@ class IdentityConstrain(Constraint):
                     self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
             if not self.attr1:
                 self.attr1 = self._extract_attribute_from_text(parts[0])
+            if not self.attr1:
+                self.attr1 = self._extract_attribute_from_text(parts[1])
             
             # Try to extract attr2 from parts[2], or parts[1] as fallback
             for part_idx in [2, 1]:
@@ -205,6 +229,7 @@ class IdentityConstrain(Constraint):
         self.attr2:tuple = None
         self._parse_attributes()
         self._try_fix_duplicate()
+
 class NextToConstrain(Constraint):
 
     def get_info(self):
@@ -244,23 +269,23 @@ class NextToConstrain(Constraint):
         parts = self.clue.split(" and ")
         
         if len(parts) >= 2:
-            for key in self.attributes.keys():
-                if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
-                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                    # If not found in parts[0], try parts[1]
-                    if not self.attr1:
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
-                    break
+            # Use _get_attribute_key_from_text to properly handle special cases
+            key = self._get_attribute_key_from_text(parts[0])
+            if key:
+                self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                # If not found in parts[0], try parts[1]
+                if not self.attr1:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
             if not self.attr1:
                 self.attr1 = self._extract_attribute_from_text(parts[0])
+            
             second_part = parts[1]
             if " are next to each other" in second_part:
                 second_part = second_part.replace(" are next to each other", "")
             
-            for key in self.attributes.keys():
-                if re.search(rf"\b{re.escape(key)}\b", second_part, re.IGNORECASE):
-                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
-                    break
+            key = self._get_attribute_key_from_text(second_part)
+            if key:
+                self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
             if not self.attr2:
                 self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -332,22 +357,20 @@ class DistanceConstrain(Constraint):
             parts = self.clue.split(" and ")
             
             if len(parts) >= 2:
-
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                        # If not found in parts[0], try parts[1]
-                        if not self.attr1:
-                            self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
-                        break
+                # Use _get_attribute_key_from_text to properly handle "mother's"
+                key = self._get_attribute_key_from_text(parts[0])
+                if key:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                    # If not found in parts[0], try parts[1]
+                    if not self.attr1:
+                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
                 
                 second_part = parts[1].rstrip(".")
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", second_part, re.IGNORECASE):
-                        self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
-                        break
+                key = self._get_attribute_key_from_text(second_part)
+                if key:
+                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
                 if not self.attr2:
                     self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -399,21 +422,19 @@ class LeftConstrain(Constraint):
             parts = self.clue.split(" is somewhere to the left of ")
             
             if len(parts) == 2:
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                        # If not found in parts[0], try parts[1]
-                        if not self.attr1:
-                            self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
-                        break
+                key = self._get_attribute_key_from_text(parts[0])
+                if key:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                    # If not found in parts[0], try parts[1]
+                    if not self.attr1:
+                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
                 
                 second_part = parts[1].rstrip(".")
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", second_part, re.IGNORECASE):
-                        self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
-                        break
+                key = self._get_attribute_key_from_text(second_part)
+                if key:
+                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
                 if not self.attr2:
                     self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -466,21 +487,19 @@ class RightConstrain(Constraint):
             if len(parts) != 2:
                 return
 
-            for key in self.attributes.keys():
-                if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
-                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                    # If not found in parts[0], try parts[1]
-                    if not self.attr1:
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
-                    break
+            key = self._get_attribute_key_from_text(parts[0])
+            if key:
+                self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                # If not found in parts[0], try parts[1]
+                if not self.attr1:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
             if not self.attr1:
                 self.attr1 = self._extract_attribute_from_text(parts[0])
                     
             second_part = parts[1].rstrip(".")
-            for key in self.attributes.keys():
-                if re.search(rf"\b{re.escape(key)}\b", second_part, re.IGNORECASE):
-                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
-                    break
+            key = self._get_attribute_key_from_text(second_part)
+            if key:
+                self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
             if not self.attr2:
                 self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -531,20 +550,19 @@ class DirectLeftConstrain(Constraint):
             parts = self.clue.split(" is directly left of ")
             
             if len(parts) == 2:
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                        # If not found in parts[0], try parts[1]
-                        if not self.attr1:
-                            self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
-                        break
+                key = self._get_attribute_key_from_text(parts[0])
+                if key:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                    # If not found in parts[0], try parts[1]
+                    if not self.attr1:
+                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
+                
                 second_part = parts[1].rstrip(".")
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", second_part, re.IGNORECASE):
-                        self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
-                        break
+                key = self._get_attribute_key_from_text(second_part)
+                if key:
+                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
                 if not self.attr2:
                     self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -595,20 +613,19 @@ class DirectRightConstrain(Constraint):
             parts = self.clue.split(" is directly right of ")
             
             if len(parts) == 2:
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                        # If not found in parts[0], try parts[1]
-                        if not self.attr1:
-                            self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
-                        break
+                key = self._get_attribute_key_from_text(parts[0])
+                if key:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                    # If not found in parts[0], try parts[1]
+                    if not self.attr1:
+                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
+                
                 second_part = parts[1].rstrip(".")
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", second_part, re.IGNORECASE):
-                        self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
-                        break
+                key = self._get_attribute_key_from_text(second_part)
+                if key:
+                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
                 if not self.attr2:
                     self.attr2 = self._extract_attribute_from_text(second_part)
 
@@ -674,10 +691,9 @@ class PositionAbsoluteConstrain(Constraint):
             parts = self.clue.split(" is in the ")
             
             if len(parts) >= 1:
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                        break
+                key = self._get_attribute_key_from_text(parts[0])
+                if key:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
 
@@ -743,10 +759,9 @@ class PositionAbsoluteNegativeConstrain(Constraint):
             parts = self.clue.split(" is not in the ")
             
             if len(parts) >= 1:
-                for key in self.attributes.keys():
-                    if re.search(rf"\b{re.escape(key)}\b", parts[0], re.IGNORECASE):
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                        break
+                key = self._get_attribute_key_from_text(parts[0])
+                if key:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
 
