@@ -47,6 +47,9 @@ class Constraint():
             if key == "colors":
                 if re.search(rf"\b{re.escape("favorite color")}\b", text, re.IGNORECASE):
                     return key
+            if key == "mother":
+                if re.search(rf"\b{re.escape("the mother of")}\b", text, re.IGNORECASE):
+                    return "child"
             if re.search(rf"\b{re.escape(key)}\b", text, re.IGNORECASE):
                 return key
         return None
@@ -157,9 +160,21 @@ class IdentityConstrain(Constraint):
         
         # Handle cases with 4+ parts (complex nested relationships)
         if len(parts) >= 4:
-            # Check for patterns like "... mother's name is X is the person's child is named Y"
-            # Try to extract the first attribute value (before the main "is")
-            self.attr1 = self._extract_attribute_from_text(parts[1])
+            # First, identify what attribute category is in parts[0]
+            # e.g., "the person's child" → 'child' attribute
+            key1 = self._get_attribute_key_from_text(parts[0])
+            
+            # Extract the value for that category from the surrounding parts
+            if key1:
+                # Try parts[1] first (usually has the value)
+                self.attr1 = self._extract_attribute_from_text_with_key(key1, parts[1])
+                # If not found, try parts[2]
+                if not self.attr1:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key1, parts[2])
+            
+            # Fallback: extract any attribute from parts[1]
+            if not self.attr1:
+                self.attr1 = self._extract_attribute_from_text(parts[1])
             
             # For the second part, reconstruct remaining parts and extract
             # This handles cases where there are multiple "is" separators
