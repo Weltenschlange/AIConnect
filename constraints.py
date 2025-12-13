@@ -378,40 +378,43 @@ class DistanceConstrain(Constraint):
         }
         
         self.distance = 1 
-        clue_lower = self.clue.lower()
         
+        clue = self.clue
         # Check if clue starts with "there are" and extract distance from next word
-        if clue_lower.startswith("there are"):
+        if self.clue.startswith("there are"):
             # Extract the word after "there are"
-            remaining = clue_lower[9:].strip()  # Skip "there are"
+            remaining = self.clue[9:].strip()  # Skip "there are"
             next_word = remaining.split()[0] if remaining.split() else None
             if next_word and next_word in distance_words:
                 self.distance = distance_words[next_word]
         else:
             # Use regex word boundaries instead of substring matching
             for word, value in distance_words.items():
-                if re.search(rf"\b{word}\b", clue_lower):
+                if re.search(rf"\b{word}\b", self.clue):
                     self.distance = value
                     break
+
+        if len(self.clue.split("between")) == 2:
+            self.clue = self.clue.split("between")[1]
     
-        if " and " in clue_lower:
-            parts = self.clue.split(" and ")
-            
+        if " and " in clue:
+            parts = clue.split(" and ")
+
             if len(parts) >= 2:
-                # Use _get_attribute_key_from_text to properly handle "mother's"
-                key = self._get_attribute_key_from_text(parts[0])
-                if key:
-                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                # Use _get_attribute_key_from_text to identify the semantic category first
+                key1 = self._get_attribute_key_from_text(parts[0])
+                if key1:
+                    self.attr1 = self._extract_attribute_from_text_with_key(key1, parts[0])
                     # If not found in parts[0], try parts[1]
                     if not self.attr1:
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
+                        self.attr1 = self._extract_attribute_from_text_with_key(key1, parts[1])
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text(parts[0])
                 
                 second_part = parts[1].rstrip(".")
-                key = self._get_attribute_key_from_text(second_part)
-                if key:
-                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
+                key2 = self._get_attribute_key_from_text(second_part)
+                if key2:
+                    self.attr2 = self._extract_attribute_from_text_with_key(key2, second_part)
                 if not self.attr2:
                     self.attr2 = self._extract_attribute_from_text(second_part)
 
