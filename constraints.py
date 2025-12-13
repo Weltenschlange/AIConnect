@@ -44,6 +44,9 @@ class Constraint():
             if key == "vacation":
                 if re.search(rf"\b{re.escape("vacations")}\b", text, re.IGNORECASE):
                     return key
+            if key == "colors":
+                if re.search(rf"\b{re.escape("favorite color")}\b", text, re.IGNORECASE):
+                    return key
             if re.search(rf"\b{re.escape(key)}\b", text, re.IGNORECASE):
                 return key
         return None
