@@ -410,7 +410,7 @@ class DistanceConstrain(Constraint):
                     break
 
         if len(self.clue.split("between")) == 2:
-            self.clue = self.clue.split("between")[1]
+            clue = self.clue.split("between")[1]
     
         if " and " in clue:
             parts = clue.split(" and ")
