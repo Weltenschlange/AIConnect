@@ -362,11 +362,19 @@ class DistanceConstrain(Constraint):
         self.distance = 1 
         clue_lower = self.clue.lower()
         
-        # Use regex word boundaries instead of substring matching
-        for word, value in distance_words.items():
-            if re.search(rf"\b{word}\b", clue_lower):
-                self.distance = value
-                break
+        # Check if clue starts with "there are" and extract distance from next word
+        if clue_lower.startswith("there are"):
+            # Extract the word after "there are"
+            remaining = clue_lower[9:].strip()  # Skip "there are"
+            next_word = remaining.split()[0] if remaining.split() else None
+            if next_word and next_word in distance_words:
+                self.distance = distance_words[next_word]
+        else:
+            # Use regex word boundaries instead of substring matching
+            for word, value in distance_words.items():
+                if re.search(rf"\b{word}\b", clue_lower):
+                    self.distance = value
+                    break
     
         if " and " in clue_lower:
             parts = self.clue.split(" and ")
