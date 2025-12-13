@@ -50,7 +50,7 @@
 - [ ] Figure out how to get our solution evaluated
   - Reference: www.kaggle.com/competitions/ai-connect-2025/overview/evaluation
 
-
+edit request
 
 
 
