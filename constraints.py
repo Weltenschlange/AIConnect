@@ -155,6 +155,7 @@ class IdentityConstrain(Constraint):
                 self.attr2 = self._extract_attribute_from_text(remaining)
                 
         elif len(parts) == 3:
+            attr1_extracted_from = 0
             # Try to extract attr1 from parts[0]
             key = self._get_attribute_key_from_text(parts[0])
             if key:
@@ -163,19 +164,33 @@ class IdentityConstrain(Constraint):
                 # If not found, try parts[1] (the value might be in the next part)
                 if not self.attr1:
                     self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
+                    attr1_extracted_from = 1
+                    
             if not self.attr1:
                 self.attr1 = self._extract_attribute_from_text(parts[0])
             if not self.attr1:
                 self.attr1 = self._extract_attribute_from_text(parts[1])
-            
-            # Try to extract attr2 from parts[2], or parts[1] as fallback
-            for part_idx in [2, 1]:
+                attr1_extracted_from = 1
+
+            if attr1_extracted_from == 0:
+                key = self._get_attribute_key_from_text(parts[1])
+                if key:
+                    self.attr2 = self._extract_attribute_from_text_with_key(key, parts[2])
                 if not self.attr2:
-                    key = self._get_attribute_key_from_text(parts[part_idx])
-                    if key:
-                        self.attr2 = self._extract_attribute_from_text_with_key(key, parts[part_idx])
-                    if not self.attr2:
-                        self.attr2 = self._extract_attribute_from_text(parts[part_idx])
+                    self.attr2 = self._extract_attribute_from_text(parts[1])
+                if not self.attr2:
+                    self.attr2 = self._extract_attribute_from_text(parts[2])
+            else:
+                self.attr2 = self._extract_attribute_from_text(parts[2])
+            
+            # # Try to extract attr2 from parts[2], or parts[1] as fallback
+            # for part_idx in [1, 2]:
+            #     if not self.attr2:
+            #         key = self._get_attribute_key_from_text(parts[part_idx])
+            #         if key:
+            #             self.attr2 = self._extract_attribute_from_text_with_key(key, parts[part_idx])
+            #         if not self.attr2:
+            #             self.attr2 = self._extract_attribute_from_text(parts[part_idx])
         elif len(parts) == 2:
             key = self._get_attribute_key_from_text(parts[0])
             if key:
