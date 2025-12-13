@@ -38,6 +38,9 @@ class Constraint():
             if key == "month":
                 if re.search(rf"\b{re.escape("birthday")}\b", text, re.IGNORECASE):
                     return key
+            if key == "drink":
+                if re.search(rf"\b{re.escape("drinker")}\b", text, re.IGNORECASE):
+                    return key
             if re.search(rf"\b{re.escape(key)}\b", text, re.IGNORECASE):
                 return key
         return None
@@ -569,25 +572,24 @@ class DirectLeftConstrain(Constraint):
         return []
     
     def _parse_attributes(self):
-        if " is directly left of " in self.clue:
-            parts = self.clue.split(" is directly left of ")
-            
-            if len(parts) == 2:
-                key = self._get_attribute_key_from_text(parts[0])
-                if key:
-                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                    # If not found in parts[0], try parts[1]
-                    if not self.attr1:
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
+        parts = self.clue.split(" is directly left of ")
+        
+        if len(parts) == 2:
+            key = self._get_attribute_key_from_text(parts[0])
+            if key:
+                self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                # If not found in parts[0], try parts[1]
                 if not self.attr1:
-                    self.attr1 = self._extract_attribute_from_text(parts[0])
-                
-                second_part = parts[1].rstrip(".")
-                key = self._get_attribute_key_from_text(second_part)
-                if key:
-                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
-                if not self.attr2:
-                    self.attr2 = self._extract_attribute_from_text(second_part)
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
+            if not self.attr1:
+                self.attr1 = self._extract_attribute_from_text(parts[0])
+            
+            second_part = parts[1].rstrip(".")
+            key = self._get_attribute_key_from_text(second_part)
+            if key:
+                self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
+            if not self.attr2:
+                self.attr2 = self._extract_attribute_from_text(second_part)
 
 
     def __init__(self, attributes: dict, clue: str):
