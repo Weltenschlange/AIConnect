@@ -49,10 +49,19 @@ class Constraint():
         return None
 
     def _extract_attribute_from_text(self, text):
+        best_match = None
+        best_length = 0
+        
         for key in self.attributes.keys():
             k = self._extract_attribute_from_text_with_key(key, text)
             if k:
-                return k
+                value, _ = k
+                value_modified = self._replace_edgecases(value)
+                if len(value_modified) > best_length:
+                    best_match = k
+                    best_length = len(value_modified)
+        
+        return best_match
     
     def _extract_attribute_from_text_with_key(self, key, text):
         # Sort by length descending to match longer values first
