@@ -103,7 +103,7 @@ class IdentityConstrain(Constraint):
 
     def is_valid(self, currentSolution):
         if not self.attr1 or not self.attr2:
-            return True
+            return False
         
         attr1_val, attr1_key = self.attr1
         attr2_val, attr2_key = self.attr2
