@@ -41,6 +41,9 @@ class Constraint():
             if key == "drink":
                 if re.search(rf"\b{re.escape("drinker")}\b", text, re.IGNORECASE):
                     return key
+            if key == "vacation":
+                if re.search(rf"\b{re.escape("vacations")}\b", text, re.IGNORECASE):
+                    return key
             if re.search(rf"\b{re.escape(key)}\b", text, re.IGNORECASE):
                 return key
         return None
