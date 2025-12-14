@@ -5,12 +5,7 @@ import copy
 
 class ConstraintSolver:
     """
-    Smart Constraint Satisfaction Problem (CSP) solver for logic puzzles.
-    
-    Uses:
-    - Constraint propagation (AC-3 like) for domain pruning
-    - Backtracking search with Minimum Remaining Values (MRV) heuristic
-    - Forward checking to reduce search space
+    Backtracking CSP solver with arc consistency (AC-3), forward checking, and MRV heuristic.
     """
     
     def __init__(self, attributes: Dict[str, List[str]], constraints: List[Constraint]):
@@ -27,6 +22,7 @@ class ConstraintSolver:
         self.propagation_calls = 0
         
     def _initialize_domains(self) -> Dict[int, Dict[str, set]]:
+        """Initialize domains: all possible values for each position-attribute pair."""
         domains = {}
         for pos in range(1, self.num_House + 1):
             domains[pos] = {}
@@ -35,42 +31,45 @@ class ConstraintSolver:
         return domains
     
     def solve(self) -> Optional[Dict[int, Dict[str, str]]]:
+        """Apply AC-3 preprocessing, then solve via backtracking with forward checking."""
+        if not self._ac3():
+            return None
+        
         if not self._propagate():
             return None
         
-        result = self._backtrack({})
-        
-        return result
+        return self._backtrack({})
     
     def _propagate(self) -> bool:
+        """Forward checking: propagate constraints iteratively until fixpoint."""
         self.propagation_calls += 1
         
         changed = True
         while changed:
             changed = False
             
-            # Apply all-different constraint: each value can only appear once per attribute
-            for attr_key in self.attributes.keys():
-                for value in self.attributes[attr_key]:
+            # All-different: each value appears at most once per attribute
+            for attr_key in sorted(self.attributes.keys()):
+                for value in sorted(self.attributes[attr_key]):
                     positions_with_value = []
                     for houseNr in range(1, self.num_House + 1):
                         if value in self.domains[houseNr][attr_key]:
                             positions_with_value.append(houseNr)
                     
-                    # If value can only go in one position, assign it there
+                    # If value can only go in one position, assign it
                     if len(positions_with_value) == 1:
                         houseNr = positions_with_value[0]
                         if len(self.domains[houseNr][attr_key]) > 1:
                             self.domains[houseNr][attr_key] = {value}
                             changed = True
                     
-                    # If value has nowhere to go, inconsistency
+                    # If value has no valid position, conflict
                     elif len(positions_with_value) == 0:
                         return False
             
-            # If position has only one value for an attribute, remove it from other positions
+            # Unit propagation: remove assigned values from other positions
             for houseNr in range(1, self.num_House + 1):
-                for attr_key in self.attributes.keys():
+                for attr_key in sorted(self.attributes.keys()):
                     if len(self.domains[houseNr][attr_key]) == 1:
                         value = list(self.domains[houseNr][attr_key])[0]
                         for other_houseNr in range(1, self.num_House + 1):
@@ -80,15 +79,15 @@ class ConstraintSolver:
                                 if len(self.domains[other_houseNr][attr_key]) == 0:
                                     return False
             
-            # Apply unary constraints (constraints with single attributes)
+            # Apply unary constraints
             for houseNr in range(1, self.num_House + 1):
-                for attr_key in self.attributes.keys():
+                for attr_key in sorted(self.attributes.keys()):
                     if len(self.domains[houseNr][attr_key]) == 0:
-                        return False  # Empty domain = inconsistency
+                        return False
                     
-                    # Remove values that would violate position-specific constraints
+                    # Remove values violating position-specific constraints
                     values_to_remove = set()
-                    for value in self.domains[houseNr][attr_key]:
+                    for value in sorted(self.domains[houseNr][attr_key]):
                         test_solution = self._build_partial_solution()
                         test_solution[houseNr][attr_key] = value
                         
@@ -100,23 +99,11 @@ class ConstraintSolver:
                         changed = True
                         if len(self.domains[houseNr][attr_key]) == 0:
                             return False
-            
-            # Apply AC-3 arc consistency
-            if not self._ac3():
-                return False
         
         return True
     
     def _ac3(self) -> bool:
-        """
-        Optimized AC-3 Algorithm with Lazy Arc Creation.
-        
-        Instead of creating all arcs upfront (6 * num_attributes * 6 * num_attributes = expensive),
-        only create arcs for attribute pairs that interact based on constraints.
-        
-        An arc from variable Xi to variable Xj is consistent if for every value in Xi's domain,
-        there exists a value in Xj's domain that satisfies the constraint between them.
-        """
+        """AC-3 algorithm: enforce arc consistency on constraint graph."""
         # Build initial queue with only relevant arcs based on constraints
         queue = self._get_initial_arcs()
         queue_set = set(queue)  # For O(1) membership testing
@@ -133,7 +120,6 @@ class ConstraintSolver:
                     return False
                 
                 # If the domain of Xi was reduced, re-add all arcs pointing to Xi
-                # (except the arc we just processed)
                 for houseNr_k in range(1, self.num_House + 1):
                     for attr_key_k in self.attributes.keys():
                         if (houseNr_k, attr_key_k) != (houseNr_i, attr_key_i) and \
@@ -146,12 +132,7 @@ class ConstraintSolver:
         return True
     
     def _get_initial_arcs(self) -> List[Tuple[Tuple[int, str], Tuple[int, str]]]:
-        """
-        Generate only relevant arcs based on constraints.
-        
-        For each constraint, extract the attribute types involved and create arcs
-        between all positions for those attribute types.
-        """
+        """Generate arcs for relevant attribute pairs based on constraints."""
         relevant_attr_pairs = set()
         
         # Extract relevant attribute pairs from constraints
@@ -170,7 +151,7 @@ class ConstraintSolver:
         
         # Create arcs for relevant attribute pairs
         arcs = []
-        for attr_key1, attr_key2 in relevant_attr_pairs:
+        for attr_key1, attr_key2 in sorted(relevant_attr_pairs):
             for houseNr1 in range(1, self.num_House + 1):
                 for houseNr2 in range(1, self.num_House + 1):
                     if (houseNr1, attr_key1) != (houseNr2, attr_key2):
@@ -179,42 +160,50 @@ class ConstraintSolver:
         return arcs
     
     def _get_constraint_attribute_pair(self, constraint: Constraint) -> Optional[Tuple[str, str]]:
-        """
-        Extract the attribute types involved in a constraint.
-        
-        Returns a tuple of (attr_key1, attr_key2) if the constraint involves two attributes,
-        or None if it's a unary constraint.
-        """
+        """Extract attribute pair from constraint, None if unary."""
         if hasattr(constraint, 'attr1') and hasattr(constraint, 'attr2'):
             if constraint.attr1 and constraint.attr2:
                 _, attr_key1 = constraint.attr1
                 _, attr_key2 = constraint.attr2
                 return (attr_key1, attr_key2)
         
-        # Unary constraints (PositionAbsolute, etc.) don't contribute to arc generation
         return None
     
     def _revise(self, houseNr_i: int, attr_key_i: str, houseNr_j: int, attr_key_j: str) -> bool:
-        """
-        Revise the domain of variable Xi by removing values that have no support in Xj.
-        
-        Returns True if the domain of Xi was modified, False otherwise.
-        """
+        """Remove values from (houseNr_i, attr_key_i) with no support in (houseNr_j, attr_key_j)."""
         revised = False
         values_to_remove = set()
         
-        for value_i in self.domains[houseNr_i][attr_key_i]:
+        # Get only constraints that involve both attributes
+        relevant_constraints = [
+            c for c in self.constraints 
+            if hasattr(c, 'attr1') and hasattr(c, 'attr2') 
+            and c.attr1 and c.attr2
+        ]
+        
+        for value_i in sorted(self.domains[houseNr_i][attr_key_i]):
             # Check if there exists a value in Xj's domain that supports value_i
             has_support = False
             
-            for value_j in self.domains[houseNr_j][attr_key_j]:
-                # Create a test assignment
-                test_solution = self._build_partial_solution()
-                test_solution[houseNr_i][attr_key_i] = value_i
-                test_solution[houseNr_j][attr_key_j] = value_j
+            for value_j in sorted(self.domains[houseNr_j][attr_key_j]):
+                # Quick check: only test if attributes match constraint pattern
+                is_valid = True
                 
-                # Check if this pairing is consistent with constraints
-                if self._is_consistent(test_solution):
+                for constraint in relevant_constraints:
+                    _, attr1_key = constraint.attr1
+                    _, attr2_key = constraint.attr2
+                    
+                    # Check if this constraint applies to our variables
+                    if (attr_key_i == attr1_key and attr_key_j == attr2_key) or \
+                       (attr_key_i == attr2_key and attr_key_j == attr1_key):
+                        # Build minimal test solution
+                        test_sol = {houseNr_i: {attr_key_i: value_i},
+                                   houseNr_j: {attr_key_j: value_j}}
+                        if not constraint.is_valid(test_sol):
+                            is_valid = False
+                            break
+                
+                if is_valid:
                     has_support = True
                     break
             
@@ -227,7 +216,7 @@ class ConstraintSolver:
         return revised
     
     def _backtrack(self, assignment: Dict[int, Dict[str, str]]) -> Optional[Dict[int, Dict[str, str]]]:
-
+        """Depth-first search with backtracking and forward checking."""
         if self._is_complete(assignment):
             return assignment
         
@@ -239,7 +228,7 @@ class ConstraintSolver:
         
         houseNr, attr_key = var
         
-        for value in list(self.domains[houseNr][attr_key]):
+        for value in sorted(self.domains[houseNr][attr_key]):
             new_assignment = copy.deepcopy(assignment)
             if houseNr not in new_assignment:
                 new_assignment[houseNr] = {}
@@ -260,6 +249,7 @@ class ConstraintSolver:
         return None
     
     def _is_complete(self, assignment: Dict[int, Dict[str, str]]) -> bool:
+        """Check if all variables are assigned."""
         if len(assignment) != self.num_House:
             return False
         
@@ -272,8 +262,8 @@ class ConstraintSolver:
         return True
     
     def _is_consistent(self, assignment: Dict[int, Dict[str, str]]) -> bool:
-
-        for attr_key in self.attributes.keys():
+        """Check if assignment satisfies all-different and constraint checks."""
+        for attr_key in sorted(self.attributes.keys()):
             used_values = []
             for houseNr in range(1, self.num_House + 1):
                 if houseNr in assignment and attr_key in assignment[houseNr]:
@@ -289,11 +279,12 @@ class ConstraintSolver:
         return True
     
     def _select_unassigned_variable(self, assignment: Dict[int, Dict[str, str]]) -> Optional[Tuple[int, str]]:
+        """Select unassigned variable with minimum remaining values (MRV heuristic)."""
         min_domain_size = float('inf')
         best_var = None
         
         for houseNr in range(1, self.num_House + 1):
-            for attr_key in self.attributes.keys():
+            for attr_key in sorted(self.attributes.keys()):
                 if houseNr in assignment and attr_key in assignment[houseNr]:
                     continue
                 
@@ -308,6 +299,7 @@ class ConstraintSolver:
         return best_var
     
     def _build_partial_solution(self) -> Dict[int, Dict[str, str]]:
+        """Extract determined values from domains to form partial solution."""
         solution = copy.deepcopy(self.assignment)
         
         for houseNr in range(1, self.num_House + 1):
@@ -334,7 +326,7 @@ class ConstraintSolver:
                 print(f"  {attr_key}: {value}")
     
     def print_domains(self) -> None:
-        """Print current domains for debugging."""
+        """Print current domain state for debugging."""
         print("\n=== Current Domains ===")
         for pos in sorted(self.domains.keys()):
             print(f"\nPosition {pos}:")
