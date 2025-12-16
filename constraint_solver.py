@@ -1,6 +1,9 @@
 from typing import Dict, List, Tuple, Optional
 from constraints import Constraint
 import copy
+import csv
+import time
+
 
 
 class ConstraintSolver:
@@ -20,6 +23,9 @@ class ConstraintSolver:
         
         self.backtrack_count = 0
         self.propagation_calls = 0
+
+        self.search_trace = []
+        self.start_time = time.time()
         
     def _initialize_domains(self) -> Dict[int, Dict[str, set]]:
         """Initialize domains: all possible values for each position-attribute pair."""
@@ -216,7 +222,7 @@ class ConstraintSolver:
         return revised
     
     def _backtrack(self, assignment: Dict[int, Dict[str, str]]) -> Optional[Dict[int, Dict[str, str]]]:
-        """Depth-first search with backtracking and forward checking."""
+        """Depth-first search with backtracking, logging and forward checking."""
         if self._is_complete(assignment):
             return assignment
         
@@ -229,6 +235,18 @@ class ConstraintSolver:
         houseNr, attr_key = var
         
         for value in sorted(self.domains[houseNr][attr_key]):
+
+            current_features = self._get_feature_vector()
+
+            log_row = [
+                          len(self.search_trace) + 1,
+                          houseNr,
+                          attr_key,
+                          value
+                      ] + current_features
+
+            self.search_trace.append(log_row)
+
             new_assignment = copy.deepcopy(assignment)
             if houseNr not in new_assignment:
                 new_assignment[houseNr] = {}
@@ -332,3 +350,49 @@ class ConstraintSolver:
             print(f"\nPosition {pos}:")
             for attr_key, values in sorted(self.domains[pos].items()):
                 print(f"  {attr_key}: {values}")
+
+    def _get_feature_vector(self) -> List[int]:
+        """
+        Constructs a feature vector representing the current state of the search.
+
+        Returns:
+            List[int]: A flattened list of current domain sizes for all variables,
+                       sorted by house number and attribute name to ensure consistency.
+        """
+        features = []
+        sorted_attrs = sorted(self.attributes.keys())
+
+        for house in range(1, self.num_House + 1):
+            for attr in sorted_attrs:
+                if house in self.domains and attr in self.domains[house]:
+                    size = len(self.domains[house][attr])
+                else:
+                    size = 0
+                features.append(size)
+
+        return features
+
+    def save_trace_to_csv(self, filename="solver_trace.csv") -> None:
+        """
+        Saves the recorded search trace to a CSV file.
+        Generates dynamic headers to match the feature vector structure.
+        """
+        if not self.search_trace:
+            print(f"Hinweis: Puzzle wurde ohne Backtracking gelöst (Trace ist leer). Erstelle leere CSV in {filename}.")
+
+        header = ["step", "house_id", "attribute", "chosen_value"]
+
+        sorted_attrs = sorted(self.attributes.keys())
+        for h in range(1, self.num_House + 1):
+            for attr in sorted_attrs:
+                col_name = f"dom_size_H{h}_{attr}"
+                header.append(col_name)
+
+        try:
+            with open(filename, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                writer.writerows(self.search_trace)
+            print(f"Trace successfully saved to {filename} ({len(self.search_trace)} rows)")
+        except Exception as e:
+            print(f"Error saving trace: {e}")
