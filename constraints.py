@@ -123,6 +123,15 @@ class IdentityConstrain(Constraint):
         return f"IdentityConstrain:  {self.clue}\nattr1:{self.attr1}\nattr2:{self.attr2}\nattributes:{self.attributes}\n"
 
     def is_valid(self, currentSolution):
+        # Handle "house X is painted Y" pattern (position-based identity)
+        if hasattr(self, 'house_num') and self.attr2:
+            attr2_val, attr2_key = self.attr2
+            # Check if position house_num has attr2_key = attr2_val
+            if self.house_num in currentSolution:
+                if attr2_key in currentSolution[self.house_num]:
+                    return currentSolution[self.house_num][attr2_key] == attr2_val
+            return True  # Not yet assigned
+        
         if not self.attr1 or not self.attr2:
             return False
         
@@ -156,6 +165,71 @@ class IdentityConstrain(Constraint):
         return []
 
     def _parse_attributes(self):
+        clue_lower = self.clue.lower()
+        
+        # Check for "X owns Y" pattern (e.g., "carol owns the hamster")
+        owns_match = re.search(r'\b(\w+)\s+owns\s+(?:the\s+)?(\w+)', clue_lower)
+        if owns_match:
+            person_or_attr = owns_match.group(1)
+            item_or_attr = owns_match.group(2)
+            
+            # Match person_or_attr as an attribute value
+            for key1, values in self.attributes.items():
+                if person_or_attr in [v.lower() for v in values]:
+                    self.attr1 = (person_or_attr, key1)
+                    break
+            
+            # Match item_or_attr as an attribute value
+            for key2, values in self.attributes.items():
+                if item_or_attr in [v.lower() for v in values]:
+                    self.attr2 = (item_or_attr, key2)
+                    break
+            
+            if self.attr1 and self.attr2:
+                return
+        
+        # Check for "the [attr] house contains/has [value]" pattern
+        house_pattern_match = re.search(r'the\s+(\w+)\s+house\s+(?:contains|has)\s+(?:the\s+)?(.+?)\.?$', clue_lower)
+        if house_pattern_match:
+            house_attr = house_pattern_match.group(1)
+            pet_or_item = house_pattern_match.group(2).strip()
+            
+            # Match house_attr as an attribute value
+            for key1, values in self.attributes.items():
+                if house_attr in [v.lower() for v in values]:
+                    self.attr1 = (house_attr, key1)
+                    break
+            
+            # Match pet_or_item as an attribute value
+            for key2, values in self.attributes.items():
+                if pet_or_item in [v.lower() for v in values]:
+                    self.attr2 = (pet_or_item, key2)
+                    break
+            
+            if self.attr1 and self.attr2:
+                return
+        
+        # Check for "house [num] is painted/is/contains/has [value]" pattern
+        house_num_pattern = re.search(r'house\s+(\d+)\s+(?:is\s+painted|is|contains|has)\s+(.+?)\.?$', clue_lower)
+        if house_num_pattern:
+            house_num = house_num_pattern.group(1)
+            value = house_num_pattern.group(2).strip()
+            
+            # Match value as an attribute
+            self.attr2 = self._extract_attribute_from_text(value)
+            if not self.attr2:
+                # Try harder to extract
+                for key, values in self.attributes.items():
+                    if value in [v.lower() for v in values]:
+                        self.attr2 = (value, key)
+                        break
+            
+            if self.attr2:
+                # Store position information in a way that is_valid can use
+                self.house_num = int(house_num)
+                return
+        
+        # Original "is" split pattern
         parts = self.clue.split(" is ")
         
         # Handle cases with 4+ parts (complex nested relationships)
@@ -275,6 +349,7 @@ class IdentityConstrain(Constraint):
         super().__init__(attributes, clue)
         self.attr1:tuple = None
         self.attr2:tuple = None
+        self.house_num = None  # For "house X is painted Y" pattern
         self._parse_attributes()
         self._try_fix_duplicate()
 
@@ -617,9 +692,20 @@ class DirectLeftConstrain(Constraint):
         return []
     
     def _parse_attributes(self):
-        parts = self.clue.split(" is directly left of ")
+        # Try multiple split patterns for "left of"
+        parts = None
+        clue_lower = self.clue.lower()
         
-        if len(parts) == 2:
+        if " is immediately to the left of " in clue_lower:
+            parts = re.split(r'\s+is\s+immediately\s+to\s+the\s+left\s+of\s+', self.clue, flags=re.IGNORECASE)
+        elif " is directly to the left of " in clue_lower:
+            parts = re.split(r'\s+is\s+directly\s+to\s+the\s+left\s+of\s+', self.clue, flags=re.IGNORECASE)
+        elif " is directly left of " in clue_lower:
+            parts = self.clue.split(" is directly left of ")
+        elif " directly to the left of " in clue_lower:
+            parts = re.split(r'\s+directly\s+to\s+the\s+left\s+of\s+', self.clue, flags=re.IGNORECASE)
+        
+        if parts and len(parts) == 2:
             key = self._get_attribute_key_from_text(parts[0])
             if key:
                 self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
@@ -685,31 +771,41 @@ class DirectRightConstrain(Constraint):
         return []
     
     def _parse_attributes(self):
-        if " is directly right of " in self.clue:
+        # Try multiple split patterns for "right of"
+        parts = None
+        clue_lower = self.clue.lower()
+        
+        if " is immediately to the right of " in clue_lower:
+            parts = re.split(r'\s+is\s+immediately\s+to\s+the\s+right\s+of\s+', self.clue, flags=re.IGNORECASE)
+        elif " is directly to the right of " in clue_lower:
+            parts = re.split(r'\s+is\s+directly\s+to\s+the\s+right\s+of\s+', self.clue, flags=re.IGNORECASE)
+        elif " is directly right of " in clue_lower:
             parts = self.clue.split(" is directly right of ")
-            
-            if len(parts) == 2:
-                key = self._get_attribute_key_from_text(parts[0])
-                if key:
-                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
-                    # If not found in parts[0], try parts[1]
-                    if not self.attr1:
-                        self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
+        elif " directly to the right of " in clue_lower:
+            parts = re.split(r'\s+directly\s+to\s+the\s+right\s+of\s+', self.clue, flags=re.IGNORECASE)
+        
+        if parts and len(parts) == 2:
+            key = self._get_attribute_key_from_text(parts[0])
+            if key:
+                self.attr1 = self._extract_attribute_from_text_with_key(key, parts[0])
+                # If not found in parts[0], try parts[1]
                 if not self.attr1:
-                    self.attr1 = self._extract_attribute_from_text(parts[0])
-                
-                second_part = parts[1].rstrip(".")
-                key = self._get_attribute_key_from_text(second_part)
-                if key:
-                    self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
-                    # If not found in the identified key, try case-insensitive matching first
-                    if not self.attr2:
-                        for value in self.attributes[key]:
-                            if value.lower() in second_part.lower():
-                                self.attr2 = (value, key)
-                                break
+                    self.attr1 = self._extract_attribute_from_text_with_key(key, parts[1])
+            if not self.attr1:
+                self.attr1 = self._extract_attribute_from_text(parts[0])
+            
+            second_part = parts[1].rstrip(".")
+            key = self._get_attribute_key_from_text(second_part)
+            if key:
+                self.attr2 = self._extract_attribute_from_text_with_key(key, second_part)
+                # If not found in the identified key, try case-insensitive matching first
                 if not self.attr2:
-                    self.attr2 = self._extract_attribute_from_text(second_part)
+                    for value in self.attributes[key]:
+                        if value.lower() in second_part.lower():
+                            self.attr2 = (value, key)
+                            break
+            if not self.attr2:
+                self.attr2 = self._extract_attribute_from_text(second_part)
 
 
     def __init__(self, attributes: dict, clue: str):
@@ -724,6 +820,19 @@ class PositionAbsoluteConstrain(Constraint):
         return f"PositionAbsoluteConstrain: {self.clue}\nPosition:{self.pos}\nattr1:{self.attr1}\nattributes:{self.attributes}\n"
     
     def is_valid(self, currentSolution):
+        # Handle "person lives in the [color] house" - positive identity
+        if hasattr(self, 'pos_attr') and self.attr1:
+            attr1_val, attr1_key = self.attr1
+            pos_attr_val, pos_attr_key = self.pos_attr
+            
+            pos1 = self._get_position_by_attribute(attr1_val, attr1_key, currentSolution)
+            pos2 = self._get_position_by_attribute(pos_attr_val, pos_attr_key, currentSolution)
+            
+            if pos1 is None or pos2 is None:
+                return True
+            
+            return pos1 == pos2
+        
         if not self.attr1 or self.pos is None:
             return False
         
@@ -764,11 +873,53 @@ class PositionAbsoluteConstrain(Constraint):
         self.pos = None
         clue_lower = self.clue.lower()
         
+        # Check for "the person in house X owns Y" pattern
+        person_house_owns = re.search(r'(?:the\s+)?person\s+in\s+house\s+(\d+)\s+owns\s+(?:the\s+)?(\w+)', clue_lower)
+        if person_house_owns:
+            self.pos = int(person_house_owns.group(1))
+            item = person_house_owns.group(2)
+            # Find which attribute this item belongs to
+            for key, values in self.attributes.items():
+                if item in [v.lower() for v in values]:
+                    self.attr1 = (item, key)
+                    return
+        
+        # Check for house number format: "lives in house 3" or "in house 2"
+        house_num_match = re.search(r'(?:lives\s+in|in)\s+house\s+(\d+)', clue_lower)
+        if house_num_match:
+            self.pos = int(house_num_match.group(1))
+            # Extract the person/attribute before "lives in house"
+            parts = re.split(r'\s+(?:lives\s+in|in)\s+house\s+\d+', self.clue, maxsplit=1)
+            if parts and parts[0]:
+                self.attr1 = self._extract_attribute_from_text(parts[0])
+            return
+        
+        # Check for position words
         for word, value in position_words.items():
             if word in clue_lower:
                 self.pos = value
                 break
         
+        # Check for "lives in the [color] house" pattern
+        if " lives in the " in clue_lower:
+            parts = self.clue.split(" lives in the ")
+            if len(parts) >= 2:
+                # Extract person/attribute from first part
+                self.attr1 = self._extract_attribute_from_text(parts[0])
+                # Extract color/attribute from "[color] house" (note: "the" already consumed in split)
+                match = re.search(r'(\w+)\s+house', parts[1].lower())
+                if match:
+                    color_or_pos = match.group(1)
+                    # Try to match it as an attribute value
+                    for key, values in self.attributes.items():
+                        if color_or_pos in [v.lower() for v in values]:
+                            # Found the color/attribute, now find its position
+                            # We'll set pos in is_valid based on currentSolution
+                            # For now, store it as an attr2-like reference
+                            self.pos_attr = (color_or_pos, key)
+                            return
+        
+        # Original pattern: "is in the"
         if " is in the " in clue_lower:
             parts = self.clue.split(" is in the ")
             
@@ -792,6 +943,19 @@ class PositionAbsoluteNegativeConstrain(Constraint):
         return f"PositionAbsoluteNegativeConstrain: {self.clue}\nPosition:{self.pos}\nattr1:{self.attr1}\nattributes:{self.attributes}\n"
     
     def is_valid(self, currentSolution):
+        # Handle "person does not live in the [color] house" - negative identity
+        if hasattr(self, 'pos_attr') and self.attr1:
+            attr1_val, attr1_key = self.attr1
+            pos_attr_val, pos_attr_key = self.pos_attr
+            
+            pos1 = self._get_position_by_attribute(attr1_val, attr1_key, currentSolution)
+            pos2 = self._get_position_by_attribute(pos_attr_val, pos_attr_key, currentSolution)
+            
+            if pos1 is None or pos2 is None:
+                return True
+            
+            return pos1 != pos2
+        
         if not self.attr1 or self.pos is None:
             return False
         
@@ -837,6 +1001,27 @@ class PositionAbsoluteNegativeConstrain(Constraint):
                 self.pos = value
                 break
         
+        # Check for "does not live in the [color] house" pattern
+        if " does not live in the " in clue_lower:
+            parts = self.clue.split(" does not live in the ")
+            if len(parts) >= 2:
+                # Extract person/attribute from first part
+                self.attr1 = self._extract_attribute_from_text(parts[0])
+                # Extract color/attribute from "the [color] house"
+                match = re.search(r'(\w+)\s+house', parts[1].lower())
+                if match:
+                    color_or_pos = match.group(1)
+                    # This is really an identity constraint: person != color
+                    # But we're treating it as position constraint
+                    # We need to store the color reference
+                    for key, values in self.attributes.items():
+                        if color_or_pos in [v.lower() for v in values]:
+                            # Found the color/attribute
+                            # We'll need to handle this in is_valid
+                            self.pos_attr = (color_or_pos, key)
+                            return
+        
+        # Original pattern: "is not in the"
         if " is not in the " in clue_lower:
             parts = self.clue.split(" is not in the ")
             

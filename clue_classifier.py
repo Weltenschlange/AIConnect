@@ -7,11 +7,16 @@ class ClueClassifier:
 
         #do not question thes black magic it works
         self.patterns = {
+            'POSITION_PERSON_OWNS': re.compile(r'(?:the\s+)?person\s+in\s+house\s+\d+\s+owns', re.IGNORECASE),
+            'OWNS': re.compile(r'\b(\w+)\s+owns\s+(?:the\s+)?(\w+)', re.IGNORECASE),
+            'POSITION_ABSOLUTE_NUMBER': re.compile(r'(?:lives\s+in|in)\s+house\s+(\d+)', re.IGNORECASE),
             'POSITION_ABSOLUTE': re.compile(r'(?:is\s+)?in\s+the\s+(\w+)\s+house', re.IGNORECASE),
-            'POSITION_ABSOLUTE_NEGATIVE': re.compile(r'is\s+not\s+in\s+the\s+(\w+)\s+house', re.IGNORECASE),
+            'POSITION_ABSOLUTE_NEGATIVE': re.compile(r'(?:is\s+not\s+in\s+the|does\s+not\s+live\s+in\s+the)\s+(\w+)\s+house', re.IGNORECASE),
+            'IDENTITY_HOUSE': re.compile(r'house\s+(\d+)\s+(?:is\s+painted|is|contains|has)', re.IGNORECASE),
+            'IDENTITY_ATTRIBUTE': re.compile(r'the\s+(\w+)\s+house\s+(?:contains|has)', re.IGNORECASE),
             'NEXT_TO': re.compile(r'(?:and|are)\s+next\s+to\s+each\s+other', re.IGNORECASE),
-            'DIRECT_LEFT': re.compile(r'(?:is\s+)?directly\s+(?:left|to\s+the\s+left)\s+of', re.IGNORECASE),
-            'DIRECT_RIGHT': re.compile(r'(?:is\s+)?directly\s+(?:right|to\s+the\s+right)\s+of', re.IGNORECASE),
+            'DIRECT_LEFT': re.compile(r'(?:is\s+)?(?:directly|immediately)\s+(?:to\s+the\s+)?left\s+of', re.IGNORECASE),
+            'DIRECT_RIGHT': re.compile(r'(?:is\s+)?(?:directly|immediately)\s+(?:to\s+the\s+)?right\s+of', re.IGNORECASE),
             'LEFT': re.compile(r'(?:is\s+)?(?:somewhere\s+)?to\s+the\s+left\s+of', re.IGNORECASE),
             'RIGHT': re.compile(r'(?:is\s+)?(?:somewhere\s+)?to\s+the\s+right\s+of', re.IGNORECASE),
             'DISTANCE': re.compile(r'(?:there\s+)?(?:is|are)\s+(?:\w+\s+)?house[s]?\s+between', re.IGNORECASE),
@@ -41,6 +46,21 @@ class ClueClassifier:
         
         if self.patterns['RIGHT'].search(clue):
             return (clue, 'RIGHT')
+        
+        if self.patterns['POSITION_PERSON_OWNS'].search(clue):
+            return (clue, 'POSITION_ABSOLUTE')
+        
+        if self.patterns['POSITION_ABSOLUTE_NUMBER'].search(clue):
+            return (clue, 'POSITION_ABSOLUTE')
+        
+        if self.patterns['OWNS'].search(clue):
+            return (clue, 'IDENTITY')
+        
+        if self.patterns['IDENTITY_HOUSE'].search(clue):
+            return (clue, 'IDENTITY')
+        
+        if self.patterns['IDENTITY_ATTRIBUTE'].search(clue):
+            return (clue, 'IDENTITY')
         
         if self.patterns['POSITION_ABSOLUTE'].search(clue):
             return (clue, 'POSITION_ABSOLUTE')

@@ -23,6 +23,10 @@ class ConstraintSolver:
         
         self.backtrack_count = 0
         self.propagation_calls = 0
+        self.assignment_attempts = 0  # Track every variable assignment attempt
+        self.domain_reductions = 0  # Track every domain reduction operation
+        self.failed_attempts = 0  # Track only failed assignments that need backtracking
+        self.search_effort = 0  # Track minimal realistic effort metric
 
         self.search_trace = []
         self.start_time = time.time()
@@ -51,8 +55,12 @@ class ConstraintSolver:
         self.propagation_calls += 1
         
         changed = True
-        while changed:
+        iterations = 0
+        max_iterations = 50  # Prevent infinite loops
+        
+        while changed and iterations < max_iterations:
             changed = False
+            iterations += 1
             
             # All-different: each value appears at most once per attribute
             for attr_key in sorted(self.attributes.keys()):
@@ -67,6 +75,7 @@ class ConstraintSolver:
                         houseNr = positions_with_value[0]
                         if len(self.domains[houseNr][attr_key]) > 1:
                             self.domains[houseNr][attr_key] = {value}
+                            self.domain_reductions += 1
                             changed = True
                     
                     # If value has no valid position, conflict
@@ -81,9 +90,47 @@ class ConstraintSolver:
                         for other_houseNr in range(1, self.num_House + 1):
                             if other_houseNr != houseNr and value in self.domains[other_houseNr][attr_key]:
                                 self.domains[other_houseNr][attr_key].discard(value)
+                                self.domain_reductions += 1
                                 changed = True
                                 if len(self.domains[other_houseNr][attr_key]) == 0:
                                     return False
+            
+            # Apply constraint-based propagation
+            for constraint in self.constraints:
+                if not hasattr(constraint, 'attr1') or not hasattr(constraint, 'attr2'):
+                    continue
+                if not constraint.attr1 or not constraint.attr2:
+                    continue
+                
+                _, attr1_key = constraint.attr1
+                _, attr2_key = constraint.attr2
+                
+                # For each position, check if constraint eliminates values
+                for houseNr in range(1, self.num_House + 1):
+                    # Check attr1 values
+                    if attr1_key in self.attributes and len(self.domains[houseNr][attr1_key]) > 1:
+                        values_to_remove = set()
+                        for val1 in list(self.domains[houseNr][attr1_key]):
+                            # Check if this value has any valid support
+                            has_support = False
+                            for other_pos in range(1, self.num_House + 1):
+                                if attr2_key in self.attributes:
+                                    for val2 in self.domains[other_pos][attr2_key]:
+                                        test_sol = {houseNr: {attr1_key: val1}, other_pos: {attr2_key: val2}}
+                                        if constraint.is_valid(test_sol):
+                                            has_support = True
+                                            break
+                                if has_support:
+                                    break
+                            if not has_support:
+                                values_to_remove.add(val1)
+                        
+                        if values_to_remove:
+                            self.domains[houseNr][attr1_key] -= values_to_remove
+                            self.domain_reductions += len(values_to_remove)
+                            changed = True
+                            if len(self.domains[houseNr][attr1_key]) == 0:
+                                return False
             
             # Apply unary constraints
             for houseNr in range(1, self.num_House + 1):
@@ -92,19 +139,21 @@ class ConstraintSolver:
                         return False
                     
                     # Remove values violating position-specific constraints
-                    values_to_remove = set()
-                    for value in sorted(self.domains[houseNr][attr_key]):
-                        test_solution = self._build_partial_solution()
-                        test_solution[houseNr][attr_key] = value
+                    if len(self.domains[houseNr][attr_key]) > 1:
+                        values_to_remove = set()
+                        for value in list(self.domains[houseNr][attr_key]):
+                            test_solution = self._build_partial_solution()
+                            test_solution[houseNr][attr_key] = value
+                            
+                            if not self._is_consistent(test_solution):
+                                values_to_remove.add(value)
                         
-                        if not self._is_consistent(test_solution):
-                            values_to_remove.add(value)
-                    
-                    if values_to_remove:
-                        self.domains[houseNr][attr_key] -= values_to_remove
-                        changed = True
-                        if len(self.domains[houseNr][attr_key]) == 0:
-                            return False
+                        if values_to_remove:
+                            self.domains[houseNr][attr_key] -= values_to_remove
+                            self.domain_reductions += len(values_to_remove)
+                            changed = True
+                            if len(self.domains[houseNr][attr_key]) == 0:
+                                return False
         
         return True
     
@@ -227,6 +276,7 @@ class ConstraintSolver:
             return assignment
         
         self.backtrack_count += 1
+        self.search_effort += 1  # Count each search node explored
         
         var = self._select_unassigned_variable(assignment)
         if var is None:
@@ -234,10 +284,30 @@ class ConstraintSolver:
         
         houseNr, attr_key = var
         
-        for value in sorted(self.domains[houseNr][attr_key]):
-
+        # Order values by Least Constraining Value (LCV)
+        domain_values = list(self.domains[houseNr][attr_key])
+        if len(domain_values) > 1:
+            value_scores = []
+            for val in domain_values:
+                # Count how many values remain in neighboring variables if we choose this value
+                remaining_count = 0
+                for other_pos in range(1, self.num_House + 1):
+                    for other_attr in self.attributes.keys():
+                        if other_pos != houseNr or other_attr != attr_key:
+                            # Quick check: will this value eliminate options?
+                            remaining_count += len(self.domains[other_pos][other_attr])
+                
+                value_scores.append((remaining_count, val))
+            
+            # Sort by most remaining values (least constraining first)
+            value_scores.sort(reverse=True)
+            domain_values = [val for _, val in value_scores]
+        
+        for value in domain_values:
+            self.assignment_attempts += 1  # Count every assignment attempt
+            
             current_features = self._get_feature_vector()
-
+            
             log_row = [
                           len(self.search_trace) + 1,
                           houseNr,
@@ -261,6 +331,10 @@ class ConstraintSolver:
                     result = self._backtrack(new_assignment)
                     if result is not None:
                         return result
+                    else:
+                        self.failed_attempts += 1  # Count when backtrack returns None (dead end)
+                else:
+                    self.failed_attempts += 1  # Count when propagate fails
                 
                 self.domains = saved_domains
         
@@ -297,9 +371,9 @@ class ConstraintSolver:
         return True
     
     def _select_unassigned_variable(self, assignment: Dict[int, Dict[str, str]]) -> Optional[Tuple[int, str]]:
-        """Select unassigned variable with minimum remaining values (MRV heuristic)."""
+        """Select unassigned variable with MRV + Degree heuristic."""
         min_domain_size = float('inf')
-        best_var = None
+        best_vars = []
         
         for houseNr in range(1, self.num_House + 1):
             for attr_key in sorted(self.attributes.keys()):
@@ -312,9 +386,43 @@ class ConstraintSolver:
                 
                 if domain_size < min_domain_size:
                     min_domain_size = domain_size
-                    best_var = (houseNr, attr_key)
+                    best_vars = [(houseNr, attr_key)]
+                elif domain_size == min_domain_size:
+                    best_vars.append((houseNr, attr_key))
         
-        return best_var
+        # Degree heuristic: break ties by choosing variable with most constraints
+        if len(best_vars) > 1:
+            max_degree = -1
+            best_var = best_vars[0]
+            for houseNr, attr_key in best_vars:
+                degree = self._count_constraints(houseNr, attr_key, assignment)
+                if degree > max_degree:
+                    max_degree = degree
+                    best_var = (houseNr, attr_key)
+            return best_var
+        
+        return best_vars[0] if best_vars else None
+    
+    def _count_constraints(self, houseNr: int, attr_key: str, assignment: Dict[int, Dict[str, str]]) -> int:
+        """Count how many constraints involve this variable with unassigned variables."""
+        count = 0
+        for constraint in self.constraints:
+            if not hasattr(constraint, 'attr1') or not hasattr(constraint, 'attr2'):
+                continue
+            if not constraint.attr1 or not constraint.attr2:
+                continue
+            
+            _, attr1_key = constraint.attr1
+            _, attr2_key = constraint.attr2
+            
+            # Check if this variable is involved
+            if attr_key in (attr1_key, attr2_key):
+                # Count if the other variable is unassigned
+                for other_pos in range(1, self.num_House + 1):
+                    other_attr = attr1_key if attr_key == attr2_key else attr2_key
+                    if other_pos not in assignment or other_attr not in assignment.get(other_pos, {}):
+                        count += 1
+        return count
     
     def _build_partial_solution(self) -> Dict[int, Dict[str, str]]:
         """Extract determined values from domains to form partial solution."""

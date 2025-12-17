@@ -16,6 +16,10 @@ class PreProcess:
         parts = re.split(r'##\s*clues:', puzzle_text, flags=re.IGNORECASE)
         
         if len(parts) < 2:
+            # Try without ## for Test_100 format
+            parts = re.split(r'\nClues:', puzzle_text, flags=re.IGNORECASE)
+        
+        if len(parts) < 2:
             return "", []
         
         characteristics_text = parts[0]
@@ -58,10 +62,32 @@ class PreProcess:
                 if attr_name == "colors":
                     attr_name = words[-2]
 
+                # Extract values with backticks (Gridmode format)
                 values = re.findall(r'`([^`]+)`', values_str)
                 
                 if values:
                     attributes[attr_name] = values
+            
+            # Test_100 format: "Colors: orange, blue, green."
+            elif ':' in line and line.strip():
+                parts_simple = line.split(':', 1)
+                if len(parts_simple) == 2:
+                    attr_name = parts_simple[0].strip().lower()
+                    values_str = parts_simple[1].strip()
+                    
+                    # Skip lines with backticks (already handled above)
+                    if '`' in values_str:
+                        continue
+                    
+                    # Extract comma-separated values
+                    values = [v.strip().rstrip('.') for v in values_str.split(',')]
+                    values = [v for v in values if v]
+                    
+                    if values and attr_name:
+                        # Normalize attribute name (Colors -> color, Pets -> pet)
+                        if attr_name.endswith('s') and attr_name not in ['class']:
+                            attr_name = attr_name[:-1]
+                        attributes[attr_name] = values
             
         return attributes
     
@@ -69,6 +95,35 @@ class PreProcess:
         characteristics_text, clues = self.preprocess_puzzle(puzzle_text)
 
         attrs = self.extract_attributes(characteristics_text)
+        
+        # For Test_100 format: extract names from clues if not in attributes
+        if 'name' not in attrs and attrs and clues:
+            names = set()
+            exclude_words = {'House', 'Colors', 'Pets', 'Clues', 'The', 'Each', 'There', 'This', 'And', 'Or'}
+            for clue in clues:
+                # Extract capitalized words (likely names)
+                potential_names = re.findall(r'\b([A-Z][a-z]+)\b', clue)
+                for name in potential_names:
+                    if name not in exclude_words:
+                        names.add(name)
+            
+            if names:
+                attrs['name'] = sorted(list(names))
+        
+        # Balance attribute lengths - add dummy values if needed
+        if attrs:
+            max_len = max(len(vals) for vals in attrs.values())
+            for key, vals in attrs.items():
+                if len(vals) < max_len:
+                    # Add dummy values
+                    dummy_count = max_len - len(vals)
+                    for i in range(dummy_count):
+                        # Generate unique dummy names
+                        if key == 'name':
+                            dummy_val = f'Person{i+1}'
+                        else:
+                            dummy_val = f'{key}{i+1}'
+                        vals.append(dummy_val)
 
         return attrs, clues
 
